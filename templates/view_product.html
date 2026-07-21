@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}상품 상세보기{% endblock %}
+{% block content %}
+<h2>{{ product.title }}</h2>
+{% if product.image_filename %}
+  <img class="product-image" src="{{ url_for('product_image', product_id=product.id, v=product.image_filename) }}" alt="{{ product.title }} 대표 이미지">
+{% endif %}
+<p>{{ product.description }}</p>
+<p>가격: {{ product.price }}원</p>
+<p>판매자: {{ seller.username if seller else '알 수 없음' }}</p>
+{% if g.current_user and product.seller_id == g.current_user.id %}
+  <p><a class="button-link" href="{{ url_for('edit_product', product_id=product.id) }}">상품 수정</a></p>
+{% endif %}
+{% endblock %}

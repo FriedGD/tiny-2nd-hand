@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}상품 수정{% endblock %}
+{% block content %}
+<h2>상품 수정</h2>
+<form method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="title">상품명</label>
+  <input id="title" type="text" name="title" maxlength="100" value="{{ product.title }}" required>
+
+  <label for="description">설명</label>
+  <textarea id="description" name="description" rows="4" maxlength="2000" required>{{ product.description }}</textarea>
+
+  <label for="price">가격</label>
+  <input id="price" type="number" name="price" min="0" max="1000000000" step="1" value="{{ product.price }}" required>
+
+  {% if product.image_filename %}
+    <p>현재 대표 이미지</p>
+    <img class="image-preview" src="{{ url_for('product_image', product_id=product.id, v=product.image_filename) }}" alt="{{ product.title }} 대표 이미지">
+    <label>
+      <input class="checkbox-input" type="checkbox" name="remove_image" value="1">
+      현재 이미지 삭제
+    </label>
+  {% endif %}
+
+  <label for="image">새 대표 이미지 (선택)</label>
+  <input id="image" type="file" name="image" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp">
+  <p class="form-help">PNG, JPEG, GIF, WebP 형식의 5MB 이하 이미지</p>
+
+  <button type="submit">수정 완료</button>
+</form>
+<p><a href="{{ url_for('manage_products') }}">상품 관리로 돌아가기</a></p>
+{% endblock %}

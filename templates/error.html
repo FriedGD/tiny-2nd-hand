@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}오류 {{ status_code }}{% endblock %}
+{% block content %}
+<h2>요청을 처리할 수 없습니다.</h2>
+<p>{{ message }}</p>
+{% if request_id %}
+  <p>요청 ID: {{ request_id }}</p>
+{% endif %}
+<p><a href="{{ url_for('index') }}">홈으로 돌아가기</a></p>
+{% endblock %}
