@@ -14,13 +14,36 @@
         <div>
           <a href="{{ url_for('view_product', product_id=product.id) }}">{{ product.title }}</a>
           <div>가격: {{ product.price }}원</div>
+          <div><span class="status-badge status-{{ product.status }}">{{ product_status_labels[product.status] }}</span></div>
+          {% if product.is_hidden %}
+            <div><span class="status-badge status-hidden">관리자 숨김</span></div>
+            <div>숨김 사유: {{ product.hidden_reason }}</div>
+          {% endif %}
+          {% if product.has_active_order %}
+            <div>안심결제 거래 중에는 상품을 수정·삭제하거나 상태를 바꿀 수 없습니다.</div>
+          {% else %}
+            <form class="product-status-form" method="post" action="{{ url_for('update_product_status', product_id=product.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="version" value="{{ product.version }}">
+            <label for="status-{{ product.id }}">상품 상태</label>
+            <select id="status-{{ product.id }}" name="status">
+              {% for status_value, status_label in product_status_labels.items() %}
+                <option value="{{ status_value }}"{% if product.status == status_value %} selected{% endif %}>{{ status_label }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">상태 변경</button>
+            </form>
+          {% endif %}
         </div>
         <div class="product-actions">
-          <a class="button-link" href="{{ url_for('edit_product', product_id=product.id) }}">수정</a>
-          <form class="inline-form" method="post" action="{{ url_for('delete_product', product_id=product.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="danger-button" type="submit">삭제</button>
-          </form>
+          {% if not product.has_active_order %}
+            <a class="button-link" href="{{ url_for('edit_product', product_id=product.id) }}">수정</a>
+            <form class="inline-form" method="post" action="{{ url_for('delete_product', product_id=product.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="version" value="{{ product.version }}">
+              <button class="danger-button" type="submit">삭제</button>
+            </form>
+          {% endif %}
         </div>
       </li>
     {% endfor %}

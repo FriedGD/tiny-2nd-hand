@@ -15,6 +15,9 @@
       <li>
         <strong>{{ user.username }}</strong>
         <p>{{ user.bio or '등록된 소개글이 없습니다.' }}</p>
+        {% if user.id != g.current_user.id %}
+          <a href="{{ url_for('report', target_type='user', target_id=user.id) }}">이 사용자 신고</a>
+        {% endif %}
       </li>
     {% endfor %}
   </ul>

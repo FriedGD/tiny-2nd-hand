@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>{% block title %}My Market{% endblock %}</title>
-  <!-- Socket.IO 클라이언트 라이브러리 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-  <style>
+  <style nonce="{{ g.csp_nonce }}">
     /* Notion 스타일 미니멀 디자인 */
     body {
       background-color: #F7F7F7;
@@ -24,6 +22,25 @@
       color: #555;
       margin-right: 15px;
       font-weight: 500;
+    }
+    .nav-chat-link {
+      position: relative;
+      display: inline-block;
+    }
+    .unread-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #D92D20;
+    }
+    .unread-dot[hidden] {
+      display: none;
+    }
+    .nav-chat-link .unread-dot {
+      position: absolute;
+      top: -3px;
+      right: 7px;
     }
     .nav-form {
       display: inline;
@@ -79,6 +96,69 @@
     .product-actions {
       flex-shrink: 0;
     }
+    .product-status-form {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .product-status-form label,
+    .product-status-form select,
+    .product-status-form button {
+      width: auto;
+      margin: 0;
+    }
+    .status-badge {
+      display: inline-block;
+      margin: 4px 0;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .status-selling {
+      color: #067647;
+      background-color: #ECFDF3;
+    }
+    .status-reserved {
+      color: #B54708;
+      background-color: #FFFAEB;
+    }
+    .status-sold {
+      color: #475467;
+      background-color: #F2F4F7;
+    }
+    .status-hidden, .status-sanctioned {
+      color: #B42318;
+      background-color: #FEE4E2;
+    }
+    .status-visible, .status-active {
+      color: #067647;
+      background-color: #ECFDF3;
+    }
+    .status-expired, .status-revoked, .status-user {
+      color: #475467;
+      background-color: #F2F4F7;
+    }
+    .status-admin {
+      color: #175CD3;
+      background-color: #EFF8FF;
+    }
+    .admin-card {
+      margin-bottom: 16px;
+      padding: 16px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+    }
+    .admin-card form {
+      margin-top: 12px;
+    }
+    .audit-details {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 13px;
+    }
     .empty-state {
       padding: 24px;
       color: #666;
@@ -119,6 +199,24 @@
       color: #666;
       font-size: 14px;
     }
+    .form-error {
+      padding: 10px;
+      color: #B42318;
+      border: 1px solid #FDA29B;
+      border-radius: 4px;
+      background-color: #FEF3F2;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     .container {
       max-width: 800px;
       margin: 40px auto;
@@ -131,7 +229,7 @@
       font-weight: 600;
       margin-bottom: 20px;
     }
-    input, textarea, button {
+    input, textarea, select, button {
       width: 100%;
       padding: 10px;
       margin-bottom: 20px;
@@ -164,18 +262,127 @@
       border-radius: 4px;
       margin-bottom: 20px;
     }
-    /* 채팅 영역 스타일 */
-    #chat {
-      margin-top: 40px;
+    .chat-layout {
+      display: grid;
+      grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
+      min-height: 540px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
     }
-    #messages {
-      height: 200px;
+    .chat-sidebar {
+      padding: 18px;
+      border-right: 1px solid #e0e0e0;
+      background-color: #fafafa;
+    }
+    .chat-sidebar input,
+    .chat-sidebar button {
+      margin-bottom: 10px;
+    }
+    .chat-sidebar-list {
+      margin-bottom: 24px;
+    }
+    .chat-sidebar-list li {
+      padding: 0;
+    }
+    .chat-sidebar-list a {
+      position: relative;
+      display: block;
+      padding: 10px;
+      color: #333;
+      text-decoration: none;
+    }
+    .chat-sidebar-list a .unread-dot {
+      position: absolute;
+      top: 9px;
+      right: 8px;
+    }
+    .chat-sidebar-list a:hover,
+    .chat-sidebar-list a[aria-current="page"] {
+      background-color: #EAF2FF;
+    }
+    .chat-preview {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      color: #666;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-conversation {
+      display: flex;
+      min-width: 0;
+      padding: 20px;
+      flex-direction: column;
+    }
+    .chat-messages {
+      height: 380px;
+      margin: 0 0 14px;
+      padding: 12px;
       overflow-y: auto;
       border: 1px solid #e0e0e0;
-      padding: 10px;
-      border-radius: 4px;
-      margin-bottom: 10px;
+      border-radius: 6px;
       background-color: #fafafa;
+    }
+    .chat-message {
+      max-width: 78%;
+      margin: 0 0 10px;
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 8px;
+      background-color: #fff;
+      overflow-wrap: anywhere;
+    }
+    .chat-message-own {
+      margin-left: auto;
+      background-color: #EAF2FF;
+    }
+    .chat-message p {
+      margin: 6px 0;
+      white-space: pre-wrap;
+    }
+    .chat-message time {
+      color: #666;
+      font-size: 12px;
+    }
+    .chat-read-status {
+      display: block;
+      margin-top: 3px;
+      color: #667085;
+      font-size: 11px;
+      text-align: left;
+    }
+    .chat-load-older {
+      width: auto;
+      align-self: center;
+      margin-bottom: 12px;
+    }
+    .chat-composer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+    .chat-composer textarea,
+    .chat-composer button {
+      margin: 0;
+    }
+    .chat-composer button {
+      width: auto;
+    }
+    .chat-status {
+      min-height: 20px;
+      margin: 8px 0 0;
+      color: #B42318;
+    }
+    @media (max-width: 700px) {
+      .chat-layout {
+        grid-template-columns: 1fr;
+      }
+      .chat-sidebar {
+        border-right: 0;
+        border-bottom: 1px solid #e0e0e0;
+      }
     }
   </style>
 </head>
@@ -184,9 +391,26 @@
     {% if g.current_user %}
       <a href="{{ url_for('dashboard') }}">대시보드</a>
       <a href="{{ url_for('manage_products') }}">상품 관리</a>
+      {% if g.current_user.role == 'user' %}
+        <a href="{{ url_for('orders') }}">거래 내역</a>
+        <span class="nav-balance">포인트: {{ current_point_balance if current_point_balance is not none else 0 }}</span>
+      {% endif %}
       <a href="{{ url_for('users') }}">사용자 조회</a>
+      <a id="nav-chat-link" class="nav-chat-link" href="{{ url_for('chats') }}">
+        채팅
+        <span id="nav-chat-unread" class="unread-dot"{% if not has_unread_chat_messages %} hidden{% endif %}>
+          <span class="sr-only">읽지 않은 채팅 있음</span>
+        </span>
+      </a>
       <a href="{{ url_for('profile') }}">프로필</a>
       <a href="{{ url_for('report') }}">신고하기</a>
+      <a href="{{ url_for('reports') }}">내 신고</a>
+      {% if g.current_user.role == 'admin' %}
+        <a href="{{ url_for('admin_users') }}">관리자 회원</a>
+        <a href="{{ url_for('admin_products') }}">관리자 상품</a>
+        <a href="{{ url_for('admin_reports') }}">신고 관리</a>
+        <a href="{{ url_for('admin_audit_logs') }}">감사 로그</a>
+      {% endif %}
       <form class="nav-form" method="post" action="{{ url_for('logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit">로그아웃</button>
@@ -208,5 +432,48 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </div>
+  {% if g.current_user %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script nonce="{{ g.csp_nonce }}">
+      (function () {
+        const navUnreadDot = document.getElementById('nav-chat-unread');
+        const unreadStateUrl = {{ url_for('chat_unread_state')|tojson }};
+        const socket = io();
+
+        function updateChatNavUnread(hasUnreadMessages) {
+          if (navUnreadDot) {
+            navUnreadDot.hidden = !hasUnreadMessages;
+          }
+        }
+
+        async function reconcileChatUnreadState() {
+          try {
+            const response = await fetch(unreadStateUrl, {
+              credentials: 'same-origin',
+              cache: 'no-store',
+              headers: {Accept: 'application/json'}
+            });
+            if (!response.ok) {
+              return;
+            }
+            const state = await response.json();
+            updateChatNavUnread(Boolean(state.has_unread_messages));
+          } catch (error) {
+            // The server-rendered state remains the safe fallback while offline.
+          }
+        }
+
+        window.marketSocket = socket;
+        window.updateChatNavUnread = updateChatNavUnread;
+        socket.on('connect', reconcileChatUnreadState);
+        socket.on('unread_state_changed', function (state) {
+          if (state && typeof state.has_unread_messages === 'boolean') {
+            updateChatNavUnread(state.has_unread_messages);
+          }
+        });
+      }());
+    </script>
+  {% endif %}
+  {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}감사 로그{% endblock %}
+{% block content %}
+<h2>감사 로그</h2>
+
+{% if logs %}
+  {% for log in logs %}
+    <section class="admin-card">
+      <h3>{{ log.action }}</h3>
+      <p>시각: {{ log.created_at|utc_datetime }}</p>
+      <p>행위자: {{ log.actor_username }}{% if log.actor_user_id %} ({{ log.actor_user_id }}){% endif %}</p>
+      <p>대상: {{ log.target_type }} / {{ log.target_id }}</p>
+      <p>결과: {{ log.outcome }}</p>
+      <p>요청 ID: {{ log.request_id or '-' }}</p>
+      <div class="audit-details">{{ log.details_json }}</div>
+    </section>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">감사 로그가 없습니다.</p>
+{% endif %}
+
+<p>
+  {% if has_previous %}
+    <a class="button-link" href="{{ url_for('admin_audit_logs', page=page - 1) }}">이전</a>
+  {% endif %}
+  {% if has_next %}
+    <a class="button-link" href="{{ url_for('admin_audit_logs', page=page + 1) }}">다음</a>
+  {% endif %}
+</p>
+{% endblock %}

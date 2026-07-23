@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}관리자 회원 관리{% endblock %}
+{% block content %}
+<h2>회원 관리</h2>
+
+{% if users %}
+  {% for user in users %}
+    <section class="admin-card">
+      <h3>{{ user.username }}</h3>
+      <p>
+        <span class="status-badge status-{{ user.role }}">
+          {{ '관리자' if user.role == 'admin' else '일반 사용자' }}
+        </span>
+        {% if user.is_sanctioned %}
+          <span class="status-badge status-sanctioned">휴면(제재) 중</span>
+        {% endif %}
+      </p>
+      <p>{{ user.bio or '등록된 소개글이 없습니다.' }}</p>
+      <p><a href="{{ url_for('admin_user_sanctions', user_id=user.id) }}">휴면(제재) 이력 조회</a></p>
+
+      {% if user.role == 'user' and not user.is_sanctioned %}
+        <form method="post" action="{{ url_for('create_user_sanction', user_id=user.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label for="duration-{{ user.id }}">휴면 기간</label>
+          <select id="duration-{{ user.id }}" name="duration" required>
+            {% for duration_value, duration_label in sanction_duration_labels.items() %}
+              <option value="{{ duration_value }}">{{ duration_label }}</option>
+            {% endfor %}
+          </select>
+          <label for="reason-{{ user.id }}">휴면 사유</label>
+          <textarea id="reason-{{ user.id }}" name="reason" maxlength="500" required></textarea>
+          <button class="danger-button" type="submit">불량 회원 휴면</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">등록된 회원이 없습니다.</p>
+{% endif %}
+{% endblock %}

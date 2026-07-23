@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}관리자 신고 관리{% endblock %}
+{% block content %}
+<h2>신고 관리</h2>
+
+{% if reports %}
+  {% for report in reports %}
+    <section class="admin-card">
+      <h3>{{ report_target_labels.get(report.target_type, '기존 신고') }} 신고</h3>
+      <p>
+        <span class="status-badge status-{{ 'cancelled' if report.cancelled_at else report.status }}">
+          {{ report_status_labels['cancelled' if report.cancelled_at else report.status] }}
+        </span>
+      </p>
+      <p>신고자: {{ report.reporter_username }} · 접수: {{ report.created_at|utc_datetime }}</p>
+      {% if report.target_type == 'user' %}
+        <p>대상 사용자: {{ report.target_username or '삭제된 사용자' }}</p>
+        {% if report.target_username %}
+          <p><a href="{{ url_for('admin_user_sanctions', user_id=report.target_id) }}">휴면 검토</a></p>
+        {% endif %}
+      {% elif report.target_type == 'product' %}
+        <p>대상 상품: {{ report.target_product_title or '삭제된 상품' }}</p>
+        {% if report.target_product_title %}
+          <p><a href="{{ url_for('view_product', product_id=report.target_id) }}">상품 확인</a> · <a href="{{ url_for('admin_products') }}">상품 관리</a></p>
+        {% endif %}
+      {% else %}
+        <p>대상 ID: {{ report.target_id }}</p>
+      {% endif %}
+      <p>신고 분류: {{ report_reason_labels[report.reason_code] }}</p>
+      <p>상세 설명: {{ report.reason }}</p>
+
+      {% if report.status == 'pending' and not report.cancelled_at %}
+        <form method="post" action="{{ url_for('resolve_report', report_id=report.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label for="status-{{ report.id }}">검토 결과</label>
+          <select id="status-{{ report.id }}" name="status" required>
+            <option value="resolved">처리 완료</option>
+            <option value="dismissed">반려</option>
+          </select>
+          <label for="resolution-{{ report.id }}">관리자 메모</label>
+          <textarea id="resolution-{{ report.id }}" name="resolution" maxlength="500" required></textarea>
+          <button type="submit">검토 결과 저장</button>
+        </form>
+      {% elif report.cancelled_at %}
+        <p>신고자 취소: {{ report.cancelled_at|utc_datetime }}</p>
+      {% else %}
+        <p>처리: {{ report.resolved_at|utc_datetime }} · {{ report.resolver_username }}</p>
+        <p>관리자 메모: {{ report.resolution }}</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">접수된 신고가 없습니다.</p>
+{% endif %}
+<nav aria-label="신고 목록 페이지">
+  {% if has_previous %}<a href="{{ url_for('admin_reports', page=page - 1) }}">이전</a>{% endif %}
+  {% if has_next %}<a href="{{ url_for('admin_reports', page=page + 1) }}">다음</a>{% endif %}
+</nav>
+{% endblock %}

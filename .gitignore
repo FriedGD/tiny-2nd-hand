@@ -3,3 +3,7 @@
 *.pdf
 __pycache__
 /instance/
+
+tests/
+
+tmp/

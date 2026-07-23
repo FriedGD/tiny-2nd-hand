@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}거래 내역{% endblock %}
+{% block content %}
+<h2>거래 내역</h2>
+<p>현재 잔액: <strong>{{ point_balance }}포인트</strong></p>
+{% if orders %}
+  <ul>
+    {% for order in orders %}
+      <li>
+        <a href="{{ url_for('view_order', order_id=order.id) }}">{{ order.product_title }}</a>
+        - {{ order.price }}포인트
+        - {{ '구매' if order.buyer_id == g.current_user.id else '판매' }}
+        - <span class="status-badge">{{ order_status_labels[order.status] }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>거래 내역이 없습니다.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+{% block title %}1대1 채팅{% endblock %}
+{% block content %}
+<h2>1대1 채팅</h2>
+
+<div class="chat-layout">
+  <aside class="chat-sidebar">
+    <h3>상대 검색</h3>
+    <form method="get" action="{{ url_for('chats') }}">
+      <label for="chat-user-search">사용자명</label>
+      <input id="chat-user-search" type="search" name="q" value="{{ query }}" maxlength="30" pattern="[A-Za-z0-9_-]{1,30}" placeholder="사용자명을 입력하세요">
+      <button type="submit">검색</button>
+    </form>
+
+    {% if query %}
+      <ul class="chat-sidebar-list" aria-label="사용자 검색 결과">
+        {% for user in search_results %}
+          <li>
+            <a href="{{ url_for('chats', user_id=user.id) }}">
+              {{ user.username }}{% if user.role == 'admin' %} (관리자){% endif %}
+            </a>
+          </li>
+        {% else %}
+          <li>검색 결과가 없습니다.</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <h3>내 대화</h3>
+    <ul id="chat-conversation-list" class="chat-sidebar-list" aria-label="대화 목록">
+      {% for conversation in conversations %}
+        <li data-conversation-id="{{ conversation.id }}">
+          {% if conversation.context_type == 'product' %}
+            {% set conversation_url = url_for('product_chat', product_id=conversation.context_id, peer_id=conversation.peer_id) %}
+          {% else %}
+            {% set conversation_url = url_for('chats', user_id=conversation.peer_id) %}
+          {% endif %}
+          <a href="{{ conversation_url }}"{% if selected_peer and selected_peer.id == conversation.peer_id and selected_context_type == conversation.context_type and (conversation.context_type != 'product' or selected_product_id == conversation.context_id) %} aria-current="page"{% endif %}>
+            <strong>{{ conversation.peer_username }}</strong>
+            <span class="unread-dot"{% if not conversation.has_unread %} hidden{% endif %}>
+              <span class="sr-only">읽지 않은 메시지 있음</span>
+            </span>
+            {% if conversation.context_label %}
+              <span class="chat-preview">{{ conversation.context_label }}</span>
+            {% endif %}
+            <span class="chat-preview">{{ conversation.last_message_body }}</span>
+          </a>
+        </li>
+      {% else %}
+        <li>아직 대화가 없습니다.</li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <section class="chat-conversation" aria-label="선택한 대화">
+    {% if selected_peer %}
+      <h3>{{ selected_peer.username }}님과의 대화</h3>
+      {% if selected_context_type == 'product' %}
+        <p class="chat-context">
+          상품 문의:
+          {% if selected_product_link %}
+            <a href="{{ selected_product_link }}">{{ selected_product_label }}</a>
+          {% else %}
+            {{ selected_product_label }}
+          {% endif %}
+        </p>
+      {% endif %}
+      <button id="load-older" class="chat-load-older" type="button" data-next-cursor="{{ next_cursor or '' }}"{% if not next_cursor %} hidden{% endif %}>이전 메시지 불러오기</button>
+      <ul id="chat-messages" class="chat-messages" aria-live="polite">
+        {% for message in messages %}
+          <li class="chat-message{% if message.sender_id == g.current_user.id %} chat-message-own{% endif %}" data-message-id="{{ message.message_id }}" data-created-at="{{ message.created_at }}">
+            <strong>{{ message.sender_username }}</strong>
+            <p>{{ message.message }}</p>
+            <time datetime="{{ message.created_at }}">{{ message.created_at|chat_datetime }}</time>
+            {% if message.sender_id == g.current_user.id %}
+              <span class="chat-read-status" data-read-status>{{ '읽음' if message.is_read else '안읽음' }}</span>
+            {% endif %}
+          </li>
+        {% else %}
+          <li id="chat-empty-state" class="empty-state">첫 메시지를 보내 대화를 시작해 보세요.</li>
+        {% endfor %}
+      </ul>
+
+      {% if selected_peer_is_sanctioned %}
+        <p class="chat-status">현재 이 사용자에게 메시지를 보낼 수 없습니다.</p>
+      {% else %}
+        <form id="chat-composer" class="chat-composer">
+          <label class="sr-only" for="chat-message-input">메시지</label>
+          <textarea id="chat-message-input" maxlength="1000" rows="2" placeholder="메시지를 입력하세요" required></textarea>
+          <button id="chat-send-button" type="submit">전송</button>
+        </form>
+        <p id="chat-status" class="chat-status" role="status" aria-live="polite"></p>
+      {% endif %}
+    {% else %}
+      <div class="empty-state">검색 결과나 대화 목록에서 상대를 선택해 주세요.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ g.csp_nonce }}">
+  (function () {
+    const currentUserId = {{ g.current_user.id|tojson }};
+    const selectedPeerId = {% if selected_peer %}{{ selected_peer.id|tojson }}{% else %}null{% endif %};
+    const selectedContextType = {{ selected_context_type|tojson }};
+    const selectedProductId = {{ selected_product_id|tojson }};
+    let selectedConversationId = {{ selected_conversation_id|tojson }};
+    const canSend = {{ (selected_peer and not selected_peer_is_sanctioned)|tojson }};
+    const historyUrl = {{ history_url|tojson }};
+    const chatStateUrl = {{ url_for('chat_state')|tojson }};
+    const messageList = document.getElementById('chat-messages');
+    const conversationList = document.getElementById('chat-conversation-list');
+    const loadOlderButton = document.getElementById('load-older');
+    const composer = document.getElementById('chat-composer');
+    const messageInput = document.getElementById('chat-message-input');
+    const sendButton = document.getElementById('chat-send-button');
+    const status = document.getElementById('chat-status');
+    const socket = window.marketSocket;
+    let stateRefreshTimer = null;
+    let readRequestInFlight = false;
+    let readRequestPending = false;
+
+    function createClientMessageId() {
+      if (typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+      }
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, function (value) {
+        return value.toString(16).padStart(2, '0');
+      }).join('');
+      return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+    }
+
+    function belongsToSelectedConversation(message) {
+      if (!selectedPeerId) {
+        return false;
+      }
+      return (
+        (
+          message.sender_id === currentUserId && message.recipient_id === selectedPeerId
+        )
+        || (
+          message.sender_id === selectedPeerId && message.recipient_id === currentUserId
+        )
+      ) && (
+        selectedConversationId
+          ? message.conversation_id === selectedConversationId
+          : message.context_type === selectedContextType
+            && (selectedContextType !== 'product' || message.product_id === selectedProductId)
+      );
+    }
+
+    function createMessageElement(message) {
+      const item = document.createElement('li');
+      item.className = 'chat-message';
+      if (message.sender_id === currentUserId) {
+        item.classList.add('chat-message-own');
+      }
+      item.dataset.messageId = message.message_id;
+      item.dataset.createdAt = String(message.created_at);
+
+      const sender = document.createElement('strong');
+      sender.textContent = message.sender_username;
+      const body = document.createElement('p');
+      body.textContent = message.message;
+      const createdAt = document.createElement('time');
+      createdAt.dateTime = String(message.created_at);
+      createdAt.textContent = new Date(message.created_at).toLocaleString('ko-KR');
+
+      item.append(sender, body, createdAt);
+      if (message.sender_id === currentUserId) {
+        const readStatus = document.createElement('span');
+        readStatus.className = 'chat-read-status';
+        readStatus.dataset.readStatus = '';
+        readStatus.textContent = message.is_read ? '읽음' : '안읽음';
+        item.appendChild(readStatus);
+      }
+      return item;
+    }
+
+    function hasMessage(messageId) {
+      return messageList && Array.from(messageList.querySelectorAll('[data-message-id]')).some(function (item) {
+        return item.dataset.messageId === messageId;
+      });
+    }
+
+    function appendMessage(message) {
+      if (!messageList || !belongsToSelectedConversation(message) || hasMessage(message.message_id)) {
+        return;
+      }
+      const emptyState = document.getElementById('chat-empty-state');
+      if (emptyState) {
+        emptyState.remove();
+      }
+      if (!selectedConversationId) {
+        selectedConversationId = message.conversation_id;
+      }
+      messageList.appendChild(createMessageElement(message));
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+
+    function createConversationElement(conversation) {
+      const item = document.createElement('li');
+      item.dataset.conversationId = conversation.conversation_id;
+      const link = document.createElement('a');
+      link.href = conversation.url;
+      if (conversation.conversation_id === selectedConversationId) {
+        link.setAttribute('aria-current', 'page');
+      }
+      const peer = document.createElement('strong');
+      peer.textContent = conversation.peer_username;
+      link.appendChild(peer);
+      if (conversation.has_unread) {
+        const dot = document.createElement('span');
+        dot.className = 'unread-dot';
+        const accessibleLabel = document.createElement('span');
+        accessibleLabel.className = 'sr-only';
+        accessibleLabel.textContent = '읽지 않은 메시지 있음';
+        dot.appendChild(accessibleLabel);
+        link.appendChild(dot);
+      }
+      if (conversation.context_label) {
+        const context = document.createElement('span');
+        context.className = 'chat-preview';
+        context.textContent = conversation.context_label;
+        link.appendChild(context);
+      }
+      const preview = document.createElement('span');
+      preview.className = 'chat-preview';
+      preview.textContent = conversation.last_message_preview;
+      link.appendChild(preview);
+      item.appendChild(link);
+      return item;
+    }
+
+    async function refreshConversationState() {
+      if (!conversationList) {
+        return;
+      }
+      try {
+        const response = await fetch(chatStateUrl, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {Accept: 'application/json'}
+        });
+        if (!response.ok) {
+          return;
+        }
+        const state = await response.json();
+        const fragment = document.createDocumentFragment();
+        if (state.conversations.length) {
+          state.conversations.forEach(function (conversation) {
+            fragment.appendChild(createConversationElement(conversation));
+          });
+        } else {
+          const empty = document.createElement('li');
+          empty.textContent = '아직 대화가 없습니다.';
+          fragment.appendChild(empty);
+        }
+        conversationList.replaceChildren(fragment);
+        if (typeof window.updateChatNavUnread === 'function') {
+          window.updateChatNavUnread(Boolean(state.has_unread_messages));
+        }
+      } catch (error) {
+        // Keep the last rendered list while the connection is unavailable.
+      }
+    }
+
+    function scheduleConversationStateRefresh() {
+      if (stateRefreshTimer !== null) {
+        window.clearTimeout(stateRefreshTimer);
+      }
+      stateRefreshTimer = window.setTimeout(function () {
+        stateRefreshTimer = null;
+        refreshConversationState();
+      }, 100);
+    }
+
+    function isSelectedConversationActive() {
+      return Boolean(
+        selectedConversationId
+        && document.visibilityState === 'visible'
+        && document.hasFocus()
+      );
+    }
+
+    function markSelectedConversationRead() {
+      if (!isSelectedConversationActive() || !socket.connected) {
+        return;
+      }
+      if (readRequestInFlight) {
+        readRequestPending = true;
+        return;
+      }
+      readRequestInFlight = true;
+      socket.emit(
+        'mark_private_messages_read',
+        {conversation_id: selectedConversationId},
+        function (response) {
+          readRequestInFlight = false;
+          if (!response || !response.ok) {
+            if (status && response && response.error) {
+              status.textContent = response.error.message;
+            }
+          }
+          if (readRequestPending) {
+            readRequestPending = false;
+            markSelectedConversationRead();
+          }
+        }
+      );
+    }
+
+    function markOwnMessagesRead(readState) {
+      if (
+        !messageList
+        || !selectedConversationId
+        || readState.conversation_id !== selectedConversationId
+        || readState.reader_id !== selectedPeerId
+      ) {
+        return;
+      }
+      messageList.querySelectorAll('.chat-message-own').forEach(function (item) {
+        const createdAt = Number(item.dataset.createdAt);
+        const messageId = item.dataset.messageId;
+        if (
+          createdAt < readState.last_read_created_at
+          || (
+            createdAt === readState.last_read_created_at
+            && messageId <= readState.last_read_message_id
+          )
+        ) {
+          const readStatus = item.querySelector('[data-read-status]');
+          if (readStatus) {
+            readStatus.textContent = '읽음';
+          }
+        }
+      });
+    }
+
+    socket.on('private_message', function (message) {
+      const belongsToSelection = belongsToSelectedConversation(message);
+      appendMessage(message);
+      scheduleConversationStateRefresh();
+      if (
+        belongsToSelection
+        && message.sender_id === selectedPeerId
+        && isSelectedConversationActive()
+      ) {
+        markSelectedConversationRead();
+      }
+    });
+    socket.on('conversation_read', function (readState) {
+      if (readState) {
+        markOwnMessagesRead(readState);
+        scheduleConversationStateRefresh();
+      }
+    });
+    socket.on('unread_state_changed', scheduleConversationStateRefresh);
+    socket.on('connect', function () {
+      scheduleConversationStateRefresh();
+      markSelectedConversationRead();
+    });
+    socket.on('connect_error', function () {
+      if (status) {
+        status.textContent = '채팅 서버에 연결할 수 없습니다.';
+      }
+    });
+
+    if (composer && canSend) {
+      composer.addEventListener('submit', function (event) {
+        event.preventDefault();
+        const message = messageInput.value.trim();
+        if (!message) {
+          status.textContent = '메시지를 입력해 주세요.';
+          return;
+        }
+        status.textContent = '';
+        sendButton.disabled = true;
+        const payload = {
+          recipient_id: selectedPeerId,
+          message: message,
+          client_message_id: createClientMessageId()
+        };
+        if (selectedContextType === 'product') {
+          payload.product_id = selectedProductId;
+        }
+        socket.emit(
+          'send_private_message',
+          payload,
+          function (response) {
+            sendButton.disabled = false;
+            if (!response || !response.ok) {
+              status.textContent = response && response.error
+                ? response.error.message
+                : '메시지를 전송하지 못했습니다.';
+              return;
+            }
+            selectedConversationId = response.message.conversation_id;
+            appendMessage(response.message);
+            scheduleConversationStateRefresh();
+            messageInput.value = '';
+            messageInput.focus();
+          }
+        );
+      });
+    }
+
+    if (loadOlderButton) {
+      loadOlderButton.addEventListener('click', async function () {
+        const cursor = loadOlderButton.dataset.nextCursor;
+        if (!cursor) {
+          return;
+        }
+        loadOlderButton.disabled = true;
+        try {
+          const pageUrl = new URL(historyUrl, window.location.origin);
+          pageUrl.searchParams.set('before', cursor);
+          const response = await fetch(pageUrl.pathname + pageUrl.search, {
+            credentials: 'same-origin',
+            headers: {Accept: 'application/json'}
+          });
+          if (!response.ok) {
+            throw new Error('history request failed');
+          }
+          const result = await response.json();
+          const previousHeight = messageList.scrollHeight;
+          const fragment = document.createDocumentFragment();
+          result.messages.forEach(function (message) {
+            if (!hasMessage(message.message_id)) {
+              fragment.appendChild(createMessageElement(message));
+            }
+          });
+          messageList.insertBefore(fragment, messageList.firstChild);
+          messageList.scrollTop += messageList.scrollHeight - previousHeight;
+          loadOlderButton.dataset.nextCursor = result.next_cursor || '';
+          loadOlderButton.hidden = !result.next_cursor;
+        } catch (error) {
+          if (status) {
+            status.textContent = '이전 메시지를 불러오지 못했습니다.';
+          }
+        } finally {
+          loadOlderButton.disabled = false;
+        }
+      });
+    }
+
+    if (messageList) {
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+    window.addEventListener('focus', markSelectedConversationRead);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        markSelectedConversationRead();
+      }
+    });
+    scheduleConversationStateRefresh();
+    markSelectedConversationRead();
+  }());
+</script>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}내 신고 내역{% endblock %}
+{% block content %}
+<h2>내 신고 내역</h2>
+
+{% if reports %}
+  {% for report in reports %}
+    <section class="admin-card">
+      <h3>{{ report_target_labels[report.target_type] }} 신고</h3>
+      <p>
+        <span class="status-badge status-{{ 'cancelled' if report.cancelled_at else report.status }}">
+          {{ report_status_labels['cancelled' if report.cancelled_at else report.status] }}
+        </span>
+      </p>
+      <p>접수: {{ report.created_at|utc_datetime }}</p>
+      {% if report.target_type == 'user' %}
+        <p>대상 사용자: {{ report.target_username or '삭제된 사용자' }}</p>
+      {% else %}
+        <p>대상 상품: {{ report.target_product_title or '삭제된 상품' }}</p>
+      {% endif %}
+      <p>신고 분류: {{ report_reason_labels[report.reason_code] }}</p>
+      <p>상세 설명: {{ report.reason }}</p>
+
+      {% if report.status == 'pending' and not report.cancelled_at %}
+        <form method="post" action="{{ url_for('cancel_report', report_id=report.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="danger-button" type="submit">신고 취소</button>
+        </form>
+      {% elif report.cancelled_at %}
+        <p>취소: {{ report.cancelled_at|utc_datetime }}</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">신고 내역이 없습니다.</p>
+{% endif %}
+
+<nav aria-label="내 신고 페이지">
+  {% if has_previous %}<a href="{{ url_for('reports', page=page - 1) }}">이전</a>{% endif %}
+  {% if has_next %}<a href="{{ url_for('reports', page=page + 1) }}">다음</a>{% endif %}
+</nav>
+{% endblock %}

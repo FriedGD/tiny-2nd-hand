@@ -373,7 +373,7 @@ class UserManagementTestCase(unittest.TestCase):
         self.assertEqual(user['session_version'], 1)
         self.assertTrue(market_app.verify_password(user['password'], NEW_PASSWORD))
         self.assertTrue(other_client.get('/dashboard').location.endswith('/login'))
-        socket_client.emit('send_message', {'username': 'forged', 'message': 'hello'})
+        socket_client.emit('send_private_message', {'message': 'hello'})
         self.assertFalse(socket_client.is_connected())
 
     def test_csrf_rejects_missing_tampered_cross_session_and_cross_origin(self):
@@ -423,9 +423,37 @@ class UserManagementTestCase(unittest.TestCase):
                 'username': 'csrf-user',
                 'password': VALID_PASSWORD,
             },
-            headers={'Origin': 'http://localhost'},
+            headers={'Origin': 'http://localhost:80'},
         )
         self.assertEqual(same_origin.status_code, 302)
+
+    def test_trusted_proxy_host_and_port_are_used_for_origin_validation(self):
+        original_wsgi_app = market_app.app.wsgi_app
+        market_app.app.wsgi_app = market_app.ProxyFix(
+            original_wsgi_app,
+            x_for=0,
+            x_proto=1,
+            x_host=1,
+            x_port=1,
+        )
+        try:
+            response = market_app.app.test_client().post(
+                '/register',
+                data={'username': 'proxy-origin-user', 'password': VALID_PASSWORD},
+                base_url='http://internal-app:5000',
+                headers={
+                    'Origin': 'https://market.example',
+                    'X-Forwarded-Proto': 'https',
+                    'X-Forwarded-Host': 'market.example',
+                    'X-Forwarded-Port': '443',
+                },
+            )
+        finally:
+            market_app.app.wsgi_app = original_wsgi_app
+
+        # Origin validation passed; the missing CSRF token is rejected next.
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('페이지를 새로고침', response.get_data(as_text=True))
 
     def test_all_state_changing_routes_reject_missing_csrf(self):
         protected_posts = [

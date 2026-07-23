@@ -4,6 +4,7 @@
 <h2>상품 수정</h2>
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="version" value="{{ product.version }}">
   <label for="title">상품명</label>
   <input id="title" type="text" name="title" maxlength="100" value="{{ product.title }}" required>
 

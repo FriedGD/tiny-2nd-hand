@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}관리자 상품 관리{% endblock %}
+{% block content %}
+<h2>상품 노출 관리</h2>
+
+{% if products %}
+  {% for product in products %}
+    <section class="admin-card">
+      <h3><a href="{{ url_for('view_product', product_id=product.id) }}">{{ product.title }}</a></h3>
+      <p>판매자: {{ product.seller_username }} · 가격: {{ product.price }}원</p>
+      <p>
+        <span class="status-badge status-{{ product.status }}">{{ product_status_labels[product.status] }}</span>
+        {% if product.is_hidden %}
+          <span class="status-badge status-hidden">숨김</span>
+        {% else %}
+          <span class="status-badge status-visible">공개</span>
+        {% endif %}
+      </p>
+      {% if product.is_hidden %}
+        <p>숨김 시각: {{ product.hidden_at|utc_datetime }}</p>
+        <p>숨김 사유: {{ product.hidden_reason }}</p>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('update_admin_product_visibility', product_id=product.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="version" value="{{ product.version }}">
+        <input type="hidden" name="visibility" value="{{ 'visible' if product.is_hidden else 'hidden' }}">
+        <label for="visibility-reason-{{ product.id }}">
+          {{ '복구' if product.is_hidden else '숨김' }} 사유
+        </label>
+        <textarea id="visibility-reason-{{ product.id }}" name="reason" maxlength="500" required></textarea>
+        <button class="{{ '' if product.is_hidden else 'danger-button' }}" type="submit">
+          {{ '상품 복구' if product.is_hidden else '상품 숨김' }}
+        </button>
+      </form>
+      {% if product.has_active_order %}
+        <p>안심결제 거래 중이거나 정산된 상품은 삭제할 수 없습니다.</p>
+      {% else %}
+        <form method="post" action="{{ url_for('delete_admin_product', product_id=product.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="version" value="{{ product.version }}">
+          <label for="delete-reason-{{ product.id }}">영구 삭제 사유</label>
+          <textarea id="delete-reason-{{ product.id }}" name="reason" maxlength="500" required></textarea>
+          <button class="danger-button" type="submit">불량 상품 영구 삭제</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">등록된 상품이 없습니다.</p>
+{% endif %}
+{% endblock %}

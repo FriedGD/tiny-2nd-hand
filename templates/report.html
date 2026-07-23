@@ -2,11 +2,29 @@
 {% block title %}신고하기{% endblock %}
 {% block content %}
 <h2>신고하기</h2>
+{% if error %}
+  <p class="form-error" role="alert">{{ error }}</p>
+{% endif %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  신고 대상 (사용자ID 또는 상품ID): <input type="text" name="target_id" required><br>
-  신고 사유: <br>
-  <textarea name="reason" rows="4" cols="50" required></textarea><br>
+  <label for="target-type">신고 대상 종류</label>
+  <select id="target-type" name="target_type" required>
+    {% for target_value, target_label in report_target_labels.items() %}
+      <option value="{{ target_value }}"{% if form_data.target_type == target_value %} selected{% endif %}>{{ target_label }}</option>
+    {% endfor %}
+  </select>
+  <label for="target-id">신고 대상 ID</label>
+  <input id="target-id" type="text" name="target_id" value="{{ form_data.target_id }}" maxlength="36" required>
+  <p class="form-help">사용자/상품 화면의 “신고” 버튼을 사용하면 ID가 자동으로 입력됩니다.</p>
+  <label for="reason-code">신고 사유 분류</label>
+  <select id="reason-code" name="reason_code" required>
+    {% for reason_value, reason_label in report_reason_labels.items() %}
+      <option value="{{ reason_value }}"{% if form_data.reason_code == reason_value %} selected{% endif %}>{{ reason_label }}</option>
+    {% endfor %}
+  </select>
+  <label for="report-reason">상세 설명</label>
+  <textarea id="report-reason" name="reason" rows="4" maxlength="500" required>{{ form_data.reason }}</textarea>
   <button type="submit">신고 접수</button>
 </form>
+<p><a href="{{ url_for('reports') }}">내 신고 내역 보기</a></p>
 {% endblock %}

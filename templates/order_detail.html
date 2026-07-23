@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}주문 상세{% endblock %}
+{% block content %}
+<h2>주문 상세</h2>
+<dl>
+  <dt>상품</dt><dd>{{ order.product_title }}</dd>
+  <dt>결제 금액</dt><dd>{{ order.price }}포인트</dd>
+  <dt>구매자</dt><dd>{{ order.buyer_username }}</dd>
+  <dt>판매자</dt><dd>{{ order.seller_username }}</dd>
+  <dt>주문 상태</dt><dd>{{ order_status_labels[order.status] }}</dd>
+  <dt>결제 상태</dt><dd>{{ payment_status_labels[order.payment_status] }}</dd>
+</dl>
+{% if order.status == 'paid' %}
+  {% if order.buyer_id == g.current_user.id %}
+    <form class="inline-form" method="post" action="{{ url_for('confirm_order', order_id=order.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="version" value="{{ order.version }}">
+      <button type="submit">구매 확정·정산</button>
+    </form>
+  {% endif %}
+  <form class="inline-form" method="post" action="{{ url_for('cancel_order', order_id=order.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="version" value="{{ order.version }}">
+    <button class="danger-button" type="submit">주문 취소·전액 환불</button>
+  </form>
+{% endif %}
+<p><a href="{{ url_for('orders') }}">거래 내역으로 돌아가기</a></p>
+{% endblock %}

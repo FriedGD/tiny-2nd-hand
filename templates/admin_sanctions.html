@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}회원 휴면(제재) 이력{% endblock %}
+{% block content %}
+<h2>{{ target.username }} 회원의 휴면(제재) 이력</h2>
+<p>
+  <span class="status-badge status-{{ target.role }}">
+    {{ '관리자' if target.role == 'admin' else '일반 사용자' }}
+  </span>
+</p>
+<p><a href="{{ url_for('admin_users') }}">회원 관리로 돌아가기</a></p>
+
+{% if sanctions %}
+  {% for sanction in sanctions %}
+    <section class="admin-card">
+      {% if sanction.revoked_at %}
+        <span class="status-badge status-revoked">해제됨</span>
+      {% elif sanction.ends_at and sanction.ends_at <= now %}
+        <span class="status-badge status-expired">만료됨</span>
+      {% else %}
+        <span class="status-badge status-active">활성</span>
+      {% endif %}
+      <p>기간: {{ sanction_duration_labels[sanction.duration_code] }}</p>
+      <p>시작: {{ sanction.created_at|utc_datetime }}</p>
+      <p>종료: {{ sanction.ends_at|utc_datetime }}</p>
+      <p>처리 관리자: {{ sanction.created_by_username }}</p>
+      <p>사유: {{ sanction.reason }}</p>
+
+      {% if sanction.revoked_at %}
+        <p>해제: {{ sanction.revoked_at|utc_datetime }}</p>
+        <p>해제 관리자: {{ sanction.revoked_by_username }}</p>
+        <p>해제 사유: {{ sanction.revoke_reason }}</p>
+      {% elif not sanction.ends_at or sanction.ends_at > now %}
+        <form method="post" action="{{ url_for('revoke_user_sanction', sanction_id=sanction.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label for="revoke-reason-{{ sanction.id }}">해제 사유</label>
+          <textarea id="revoke-reason-{{ sanction.id }}" name="reason" maxlength="500" required></textarea>
+          <button type="submit">제재 해제</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <p class="empty-state">제재 이력이 없습니다.</p>
+{% endif %}
+{% endblock %}
