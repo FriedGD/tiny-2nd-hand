@@ -2,7 +2,7 @@
 
 ## Tiny Secondhand Shopping Platform
 
-Python과 Flask로 구현한 중고거래 학습용 웹 애플리케이션이다. 회원 관리,
+Python과 Flask로 구현한 중고거래 플랫폼이다. 회원 관리,
 상품 등록, 개인 채팅, 신고 및 관리자 기능과 가상 포인트 기반 안전결제를
 제공한다. 일반 사용자는 가입 시 1,000,000포인트를 받고, 구매 금액은 구매
 확정 전까지 에스크로 상태로 유지된다.
@@ -83,13 +83,4 @@ Linux/macOS:
 ```bash
 export ADMIN_USERNAME="existing-admin-user"
 python app.py
-```
-
-## 외부 장비에서 로컬 서버 테스트
-
-외부 장비에서 임시로 확인해야 할 때만 ngrok 같은 터널링 도구를 사용할 수
-있다.
-
-```text
-ngrok http 5000
 ```
