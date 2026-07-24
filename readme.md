@@ -25,8 +25,8 @@ conda --version
 ## 프로젝트 내려받기
 
 ```text
-git clone 
-cd 
+git clone https://github.com/FriedGD/tiny-2nd-hand.git
+cd tiny-2nd-hand
 ```
 
 ## Conda 실행 환경 구축
